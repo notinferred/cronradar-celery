@@ -8,6 +8,21 @@ Monitor Celery periodic tasks. Auto-discover Beat schedules and track execution.
 pip install cronradar-celery
 ```
 
+## Configuration
+
+Set environment variable:
+```bash
+export CRONRADAR_API_KEY=ck_app_xxxxx_yyyyy
+```
+
+Get your API key from [cronradar.com/dashboard](https://cronradar.com/dashboard)
+
+Or pass it directly:
+
+```python
+setup_cronradar(app, mode='selective', api_key='ck_app_xxxxx_yyyyy')
+```
+
 ## Quick Start - Selective Mode
 
 Monitor specific tasks with the `@monitor` decorator:
@@ -69,21 +84,6 @@ def my_task():
 @app.task
 def my_task():
     pass
-```
-
-## Configuration
-
-Set environment variable:
-```bash
-export CRONRADAR_API_KEY=ck_app_xxxxx_yyyyy
-```
-
-Get your API key from [cronradar.com/dashboard](https://cronradar.com/dashboard)
-
-Or pass it directly:
-
-```python
-setup_cronradar(app, mode='selective', api_key='ck_app_xxxxx_yyyyy')
 ```
 
 ## Requirements
