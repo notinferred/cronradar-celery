@@ -8,9 +8,7 @@ Monitor Celery periodic tasks. Auto-discover Beat schedules and track execution.
 pip install cronradar-celery
 ```
 
-## Quick Start
-
-### Selective Mode
+## Quick Start - Selective Mode
 
 Monitor specific tasks with the `@monitor` decorator:
 
@@ -19,106 +17,73 @@ from celery import Celery
 from cronradar_celery import setup_cronradar, monitor
 
 app = Celery('myapp')
-
-# Enable selective monitoring
 setup_cronradar(app, mode='selective')
 
-# Only monitored tasks
 @app.task
 @monitor
 def send_daily_report():
-    # Your task logic
-    pass
+    generate_report()
 
-# Not monitored
 @app.task
 def internal_cleanup():
-    # This task won't be monitored
+    # Not monitored (no decorator)
     pass
 ```
 
-### MonitorAll Mode
+## Quick Start - MonitorAll Mode
 
-Monitor all periodic tasks automatically:
+Monitor all periodic tasks by default:
 
 ```python
 from celery import Celery
 from cronradar_celery import setup_cronradar, skip_monitor
 
 app = Celery('myapp')
-
-# Enable comprehensive monitoring
 setup_cronradar(app, mode='all')
 
-# All tasks monitored by default
 @app.task
 def send_daily_report():
+    # Monitored automatically
     pass
 
-# Opt-out specific tasks
 @app.task
 @skip_monitor
 def internal_cleanup():
-    # This task won't be monitored
+    # Opted out
     pass
 ```
 
-## Features
+## Decorator Order (Important!)
 
-- **Auto-Discovery**: Automatically finds and syncs Celery Beat periodic tasks
-- **Zero Configuration**: Add one line to your Celery setup
-- **Schedule Detection**: Extracts cron expressions from Beat schedules (crontab and timedelta)
-- **No Task Changes**: Monitor tasks without modifying task logic
-- **Selective or Comprehensive**: Choose opt-in or opt-out monitoring
+The `@monitor` and `@skip_monitor` decorators **must** be placed **after** `@app.task`:
+
+```python
+# ✅ Correct
+@app.task
+@monitor
+def my_task():
+    pass
+
+# ❌ Wrong - won't work
+@monitor
+@app.task
+def my_task():
+    pass
+```
 
 ## Configuration
 
-Set your API key via environment variable:
-
+Set environment variable:
 ```bash
 export CRONRADAR_API_KEY=ck_app_xxxxx_yyyyy
 ```
 
-Get your API key from [cronradar.com](https://cronradar.com)
+Get your API key from [cronradar.com/dashboard](https://cronradar.com/dashboard)
 
-### Advanced Configuration
+Or pass it directly:
 
 ```python
-from cronradar_celery import setup_cronradar
-
-# Pass API key directly (optional)
 setup_cronradar(app, mode='selective', api_key='ck_app_xxxxx_yyyyy')
-
-# Choose monitoring mode
-setup_cronradar(app, mode='selective')  # Opt-in with @monitor
-setup_cronradar(app, mode='all')        # Opt-out with @skip_monitor
-```
-
-## How It Works
-
-1. **Setup**: Call `setup_cronradar(app)` after creating your Celery app
-2. **Auto-Discovery**: Integration inspects `app.conf.beat_schedule` and syncs all periodic tasks
-3. **Task Execution**: When tasks complete successfully, execution is recorded via Celery signals
-4. **Monitoring**: CronRadar tracks execution and alerts if tasks don't run on schedule
-
-## Beat Schedule Support
-
-Works with both crontab and timedelta schedules:
-
-```python
-from celery.schedules import crontab
-from datetime import timedelta
-
-app.conf.beat_schedule = {
-    'send-report-daily': {
-        'task': 'tasks.send_report',
-        'schedule': crontab(hour=0, minute=0),  # ✓ Converts to '0 0 * * *'
-    },
-    'cleanup-hourly': {
-        'task': 'tasks.cleanup',
-        'schedule': timedelta(hours=1),  # ✓ Converts to '0 * * * *'
-    },
-}
 ```
 
 ## Requirements
@@ -129,9 +94,10 @@ app.conf.beat_schedule = {
 
 ## Links
 
-📚 [Documentation](https://cronradar.com/docs)
-🐛 [Issues](https://github.com/cronradar/cronradar-celery/issues)
-✉️ support@cronradar.com
+- 📚 [Documentation](https://cronradar.com/docs/sdks/celery)
+- 📦 [PyPI](https://pypi.org/project/cronradar-celery)
+- 🐛 [GitHub Issues](https://github.com/cronradar/cronradar-celery/issues)
+- ✉️ support@cronradar.com
 
 ## License
 
