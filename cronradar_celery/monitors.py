@@ -6,7 +6,7 @@ import sys
 from functools import wraps
 from typing import Any, Callable
 from celery import Celery
-from celery.signals import task_success
+from celery.signals import task_prerun, task_success, task_failure
 
 import cronradar
 from .utils import normalize_task_name
@@ -30,17 +30,52 @@ def skip_monitor_decorator(func: Callable) -> Callable:
 
 def setup_task_monitoring(app: Celery) -> None:
     """
-    Setup Celery signal handlers for task monitoring.
+    Setup Celery signal handlers for task monitoring with lifecycle tracking.
     Monitors all tasks unless they have @skip_monitor decorator.
 
     Args:
         app: Celery application instance
     """
 
+    @task_prerun.connect
+    def handle_task_prerun(sender=None, task_id=None, task=None, **kwargs):
+        """
+        Handle task start for lifecycle tracking.
+        Monitors all tasks unless marked with @skip_monitor.
+        """
+        try:
+            # Get task name
+            task_name = None
+            if task and hasattr(task, 'name'):
+                task_name = task.name
+            elif sender and hasattr(sender, 'name'):
+                task_name = sender.name
+
+            if not task_name:
+                return
+
+            # Check if this task should be monitored
+            task_obj = task or sender
+            if not should_monitor_task(task_obj):
+                return
+
+            # Normalize task name to monitor key
+            monitor_key = normalize_task_name(task_name)
+
+            if not monitor_key:
+                return
+
+            # Signal job start for lifecycle tracking
+            cronradar.start_job(monitor_key)
+
+        except Exception as e:
+            # Never break user's task execution
+            print(f"[CronRadar.Celery] StartJob error: {e}", file=sys.stderr)
+
     @task_success.connect
     def handle_task_success(sender=None, **kwargs):
         """
-        Handle successful task execution.
+        Handle successful task completion for lifecycle tracking.
         Monitors all tasks unless marked with @skip_monitor.
         """
         try:
@@ -60,13 +95,43 @@ def setup_task_monitoring(app: Celery) -> None:
             if not monitor_key:
                 return
 
-            # Use base SDK to monitor
-            # Don't pass schedule here - it's already synced via discovery
-            cronradar.monitor(monitor_key)
+            # Signal job completion for lifecycle tracking
+            cronradar.complete_job(monitor_key)
 
         except Exception as e:
             # Never break user's task execution
-            print(f"[CronRadar.Celery] Monitor error: {e}", file=sys.stderr)
+            print(f"[CronRadar.Celery] CompleteJob error: {e}", file=sys.stderr)
+
+    @task_failure.connect
+    def handle_task_failure(sender=None, task_id=None, exception=None, **kwargs):
+        """
+        Handle task failure for immediate failure reporting.
+        Monitors all tasks unless marked with @skip_monitor.
+        """
+        try:
+            # Get task name from sender
+            if not sender or not hasattr(sender, 'name'):
+                return
+
+            task_name = sender.name
+
+            # Check if this task should be monitored
+            if not should_monitor_task(sender):
+                return
+
+            # Normalize task name to monitor key
+            monitor_key = normalize_task_name(task_name)
+
+            if not monitor_key:
+                return
+
+            # Signal job failure for immediate alert
+            message = str(exception) if exception else "Task failed"
+            cronradar.fail_job(monitor_key, message)
+
+        except Exception as e:
+            # Never break user's task execution
+            print(f"[CronRadar.Celery] FailJob error: {e}", file=sys.stderr)
 
 
 def should_monitor_task(task) -> bool:
