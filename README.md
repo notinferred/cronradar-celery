@@ -15,8 +15,6 @@ Set environment variable:
 export CRONRADAR_API_KEY=ck_app_xxxxx_yyyyy
 ```
 
-Get your API key from [cronradar.com/dashboard](https://cronradar.com/dashboard)
-
 Or pass it directly:
 
 ```python
@@ -72,13 +70,11 @@ def my_task():
 
 ## Links
 
-- 📚 [Documentation](https://cronradar.com/docs/sdks/celery)
-- 📦 [PyPI](https://pypi.org/project/cronradar-celery)
-- 🐛 [GitHub Issues](https://github.com/cronradar/cronradar-celery/issues)
-- ✉️ support@cronradar.com
+- [Documentation](https://docs.cronradar.com)
+- [PyPI](https://pypi.org/project/cronradar-celery)
+
+**See also:** [CronRadar Python SDK](https://pypi.org/project/cronradar)
 
 ## License
 
-Proprietary - © 2025 CronRadar. All rights reserved.
-
-See [LICENSE](./LICENSE) for details. This integration may only be used with the CronRadar monitoring service.
+© 2025 [CronRadar](https://cronradar.com) - See [LICENSE](./LICENSE)
