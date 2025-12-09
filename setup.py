@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="cronradar-celery",
-    version="0.0.2",
+    version="0.0.3",
     author="Administrator",
     author_email="contact@cronradar.com",
     description="Automatic monitoring for Celery periodic tasks. Monitor selective tasks or all tasks with auto-discovery.",
