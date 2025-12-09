@@ -10,13 +10,13 @@ import cronradar
 from .utils import normalize_task_name, generate_readable_name, schedule_to_cron
 
 
-def discover_and_sync_tasks(app: Celery, selective_mode: bool) -> None:
+def discover_and_sync_tasks(app: Celery) -> None:
     """
     Discover Celery Beat periodic tasks and sync them to CronRadar.
+    Syncs all periodic tasks found in beat schedule.
 
     Args:
         app: Celery application instance
-        selective_mode: True for selective mode, False for monitorAll
     """
     try:
         # Get beat schedule configuration
@@ -38,14 +38,6 @@ def discover_and_sync_tasks(app: Celery, selective_mode: bool) -> None:
 
                 if not task_name or not schedule:
                     continue
-
-                # Check if this task should be monitored
-                if selective_mode:
-                    # In selective mode, check if task has @monitor decorator
-                    # We can only check this at runtime, so we'll sync all and rely on
-                    # the signal handler to filter. This ensures monitors exist for discovery.
-                    # Alternative: Skip sync in selective mode and rely on self-healing
-                    pass
 
                 # Normalize task name to monitor key
                 monitor_key = normalize_task_name(task_name)

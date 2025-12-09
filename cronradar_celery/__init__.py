@@ -2,7 +2,7 @@
 CronRadar Celery Integration
 
 Automatic monitoring for Celery periodic tasks.
-Supports Selective mode (opt-in) and MonitorAll mode (comprehensive monitoring).
+Monitors all tasks by default - use @skip_monitor to opt-out.
 """
 
 import sys
@@ -10,23 +10,22 @@ from typing import Optional
 from celery import Celery
 from celery.signals import task_success, task_failure, task_retry
 
-from .monitors import setup_task_monitoring, monitor_decorator, skip_monitor_decorator
+from .monitors import setup_task_monitoring, skip_monitor_decorator
 from .discovery import discover_and_sync_tasks
 
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 
 # Track initialization to prevent duplicate setup
 _initialized = False
-_selective_mode = True
 
 
-def setup_cronradar(app: Celery, mode: str = 'selective', api_key: Optional[str] = None) -> None:
+def setup_cronradar(app: Celery, api_key: Optional[str] = None) -> None:
     """
     Configure CronRadar monitoring for Celery tasks.
+    Monitors all periodic tasks by default - use @skip_monitor decorator to opt-out.
 
     Args:
         app: Celery application instance
-        mode: 'selective' (monitor tasks with @monitor) or 'all' (monitor all periodic tasks)
         api_key: Optional API key (defaults to CRONRADAR_API_KEY env var)
 
     Example:
@@ -34,37 +33,34 @@ def setup_cronradar(app: Celery, mode: str = 'selective', api_key: Optional[str]
         from cronradar_celery import setup_cronradar
 
         app = Celery('myapp')
-        setup_cronradar(app, mode='all')
+        setup_cronradar(app)
     """
-    global _initialized, _selective_mode
+    global _initialized
 
     if _initialized:
         print("[CronRadar.Celery] Already initialized. Skipping duplicate setup.", file=sys.stderr)
         return
 
     _initialized = True
-    _selective_mode = (mode == 'selective')
 
     # Store API key in environment if provided
     if api_key:
         import os
         os.environ['CRONRADAR_API_KEY'] = api_key
 
-    mode_desc = "selective (opt-in)" if _selective_mode else "monitorAll (opt-out)"
-    print(f"[CronRadar.Celery] Initializing in {mode_desc} mode", file=sys.stderr)
+    print("[CronRadar.Celery] Initializing MonitorAll mode - use @skip_monitor to opt-out", file=sys.stderr)
 
     # Setup task monitoring via signals
-    setup_task_monitoring(app, _selective_mode)
+    setup_task_monitoring(app)
 
     # Auto-discover and sync beat schedule tasks
-    discover_and_sync_tasks(app, _selective_mode)
+    discover_and_sync_tasks(app)
 
     print("[CronRadar.Celery] ✓ Monitoring enabled successfully!", file=sys.stderr)
 
 
-# Decorators for selective mode
-monitor = monitor_decorator
+# Decorator for opting out
 skip_monitor = skip_monitor_decorator
 
 
-__all__ = ['setup_cronradar', 'monitor', 'skip_monitor', '__version__']
+__all__ = ['setup_cronradar', 'skip_monitor', '__version__']

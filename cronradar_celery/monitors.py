@@ -12,22 +12,6 @@ import cronradar
 from .utils import normalize_task_name
 
 
-def monitor_decorator(func: Callable) -> Callable:
-    """
-    Mark a Celery task for monitoring in Selective mode.
-
-    Example:
-        from cronradar_celery import monitor
-
-        @app.task
-        @monitor
-        def send_daily_report():
-            pass
-    """
-    func._cronradar_monitor = True
-    return func
-
-
 def skip_monitor_decorator(func: Callable) -> Callable:
     """
     Mark a Celery task to skip monitoring in MonitorAll mode.
@@ -44,20 +28,20 @@ def skip_monitor_decorator(func: Callable) -> Callable:
     return func
 
 
-def setup_task_monitoring(app: Celery, selective_mode: bool) -> None:
+def setup_task_monitoring(app: Celery) -> None:
     """
     Setup Celery signal handlers for task monitoring.
+    Monitors all tasks unless they have @skip_monitor decorator.
 
     Args:
         app: Celery application instance
-        selective_mode: True for selective mode, False for monitorAll
     """
 
     @task_success.connect
     def handle_task_success(sender=None, **kwargs):
         """
         Handle successful task execution.
-        Only monitors tasks that should be tracked based on mode and decorators.
+        Monitors all tasks unless marked with @skip_monitor.
         """
         try:
             # Get task name from sender
@@ -67,7 +51,7 @@ def setup_task_monitoring(app: Celery, selective_mode: bool) -> None:
             task_name = sender.name
 
             # Check if this task should be monitored
-            if not should_monitor_task(sender, selective_mode):
+            if not should_monitor_task(sender):
                 return
 
             # Normalize task name to monitor key
@@ -85,13 +69,13 @@ def setup_task_monitoring(app: Celery, selective_mode: bool) -> None:
             print(f"[CronRadar.Celery] Monitor error: {e}", file=sys.stderr)
 
 
-def should_monitor_task(task, selective_mode: bool) -> bool:
+def should_monitor_task(task) -> bool:
     """
-    Determine if a task should be monitored based on mode and decorators.
+    Determine if a task should be monitored.
+    Monitors all tasks unless marked with @skip_monitor decorator.
 
     Args:
         task: Celery task instance
-        selective_mode: True for selective mode, False for monitorAll
 
     Returns:
         True if task should be monitored
@@ -109,21 +93,13 @@ def should_monitor_task(task, selective_mode: bool) -> bool:
             task_func = task
 
         if not task_func:
-            # If we can't determine, default based on mode
-            return not selective_mode
+            # If we can't determine, monitor by default
+            return True
 
-        # Check for skip decorator (always respected)
-        if getattr(task_func, '_cronradar_skip', False):
-            return False
-
-        if selective_mode:
-            # Selective mode: Only monitor if @monitor decorator present
-            return getattr(task_func, '_cronradar_monitor', False)
-        else:
-            # MonitorAll mode: Monitor unless @skip_monitor present
-            return not getattr(task_func, '_cronradar_skip', False)
+        # Monitor all tasks unless @skip_monitor decorator present
+        return not getattr(task_func, '_cronradar_skip', False)
 
     except Exception as e:
         print(f"[CronRadar.Celery] Error checking task decorators: {e}", file=sys.stderr)
-        # If we can't determine, default based on mode
-        return not selective_mode
+        # If we can't determine, monitor by default
+        return True
