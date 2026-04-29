@@ -7,6 +7,8 @@ import re
 from typing import Optional
 from datetime import timedelta
 
+from cronradar.constants import MAX_MONITOR_KEY_LENGTH
+
 
 def normalize_task_name(task_name: str) -> str:
     """
@@ -31,9 +33,9 @@ def normalize_task_name(task_name: str) -> str:
     # Remove leading/trailing hyphens
     key = key.strip('-')
 
-    # Limit length
-    if len(key) > 64:
-        key = key[:64]
+    # Truncate at the SDK-wide max key length
+    if len(key) > MAX_MONITOR_KEY_LENGTH:
+        key = key[:MAX_MONITOR_KEY_LENGTH]
 
     return key
 

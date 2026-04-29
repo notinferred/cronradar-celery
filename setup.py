@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="cronradar-celery",
-    version="0.0.5",
+    version="0.0.6",
     author="Administrator",
     author_email="contact@cronradar.com",
     description="Automatic monitoring for Celery periodic tasks. Monitor selective tasks or all tasks with auto-discovery.",
@@ -34,7 +34,7 @@ setup(
     ],
     python_requires=">=3.8",
     install_requires=[
-        "cronradar>=0.0.5",
+        "cronradar>=0.0.6",
         "celery>=5.0.0",
     ],
     keywords="celery monitoring cron task beat periodic auto-discovery cronradar",

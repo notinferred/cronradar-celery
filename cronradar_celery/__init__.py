@@ -13,7 +13,7 @@ from celery.signals import task_success, task_failure, task_retry
 from .monitors import setup_task_monitoring, skip_monitor_decorator
 from .discovery import discover_and_sync_tasks
 
-__version__ = "0.0.4"
+__version__ = "0.0.6"
 
 # Track initialization to prevent duplicate setup
 _initialized = False
