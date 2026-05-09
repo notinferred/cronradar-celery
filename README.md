@@ -85,31 +85,22 @@ def internal_cleanup():
     pass
 ```
 
-### Override the monitor key
+### Custom monitor keys
+
+Monitor keys default to the Celery task name (lowercased, dots → dashes). Override the task name itself if you need a different key:
 
 ```python
-from cronradar_celery import monitor
-
-@app.task
-@monitor(key='critical-payment-processor')
+@app.task(name='critical-payment-processor')
 def process_payments():
-    # appears in dashboard under the explicit key
+    # registered in CronRadar as "critical-payment-processor"
     pass
 ```
 
-### Override grace period for a specific task
-
-```python
-@app.task
-@monitor(grace_period=600)
-def long_running_sync():
-    # 10-minute grace period instead of the default 60s
-    pass
-```
+The integration uses `task.name` as the monitor key.
 
 ## Reference
 
-### `setup_cronradar(app, api_key=None, default_grace_period=None)`
+### `setup_cronradar(app, api_key=None)`
 
 Wires the integration to a Celery app. Called once at application startup.
 
@@ -117,7 +108,6 @@ Wires the integration to a Celery app. Called once at application startup.
 |---|---|---|---|
 | `app` | `celery.Celery` | yes | The Celery app instance. |
 | `api_key` | `str` | optional | API key. Falls back to `CRONRADAR_API_KEY` env var if omitted. |
-| `default_grace_period` | `int` | optional | Seconds. Default for tasks without an explicit override. Default: 60. |
 
 What it does:
 
@@ -126,19 +116,20 @@ What it does:
 
 Idempotent — safe to call multiple times if you have multiple Celery apps.
 
+Grace period is configured per-monitor on CronRadar (default 60 seconds; set via the dashboard).
+
 ### Decorators
 
 | Decorator | Purpose |
 |---|---|
 | `@skip_monitor` | Exclude this task from monitoring even if it has a Beat schedule. |
-| `@monitor(key=None, grace_period=None)` | Override the monitor key or grace period for a specific task. |
 
-`@monitor` and `@skip_monitor` must be placed **after** `@app.task`:
+`@skip_monitor` must be placed **after** `@app.task`:
 
 ```python
 @app.task
-@monitor(key='custom-key')
-def my_task():
+@skip_monitor
+def internal_cleanup():
     return 'done'
 ```
 
