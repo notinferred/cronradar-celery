@@ -11,9 +11,12 @@ from celery import Celery
 from celery.signals import task_success, task_failure, task_retry
 
 from .monitors import setup_task_monitoring, skip_monitor_decorator
-from .discovery import discover_and_sync_tasks
+from .discovery import discover_and_sync_tasks, RECONCILE_TASK_NAME
 
-__version__ = "0.0.6"
+__version__ = "0.1.0"
+
+# How often the heartbeat re-declares the schedule (seconds).
+RECONCILE_INTERVAL_SECONDS = 900
 
 # Track initialization to prevent duplicate setup
 _initialized = False
@@ -50,13 +53,37 @@ def setup_cronradar(app: Celery, api_key: Optional[str] = None) -> None:
 
     print("[CronRadar.Celery] Initializing MonitorAll mode - use @skip_monitor to opt-out", file=sys.stderr)
 
-    # Setup task monitoring via signals
+    # Setup task monitoring via signals (execution telemetry)
     setup_task_monitoring(app)
 
-    # Auto-discover and sync beat schedule tasks
+    # Register the heartbeat reconcile task + periodic schedule (declaration)
+    _register_reconcile(app)
+
+    # Reconcile the full beat schedule now so coverage exists at startup
     discover_and_sync_tasks(app)
 
     print("[CronRadar.Celery] ✓ Monitoring enabled successfully!", file=sys.stderr)
+
+
+def _register_reconcile(app: Celery) -> None:
+    """
+    Register the periodic reconcile task and add it to the beat schedule so the
+    server keeps seeing the authoritative set (heartbeat) and drift is reflected.
+    """
+    try:
+        @app.task(name=RECONCILE_TASK_NAME)
+        def _cronradar_reconcile():
+            discover_and_sync_tasks(app)
+
+        if app.conf.beat_schedule is None:
+            app.conf.beat_schedule = {}
+
+        app.conf.beat_schedule['cronradar-reconcile'] = {
+            'task': RECONCILE_TASK_NAME,
+            'schedule': float(RECONCILE_INTERVAL_SECONDS),
+        }
+    except Exception as e:
+        print(f"[CronRadar.Celery] Failed to register reconcile heartbeat: {e}", file=sys.stderr)
 
 
 # Decorator for opting out
