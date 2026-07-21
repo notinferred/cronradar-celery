@@ -32,6 +32,8 @@ setup_cronradar(app, api_key='ck_app_xxxxxxxxxxxxxxxxxxxx')
 
 Get the API key from the CronRadar dashboard at [app.cronradar.com](https://app.cronradar.com) under your application's settings. API keys have the form `ck_app_<random>`.
 
+Create a separate CronRadar application and API key for production, staging, and development. Store the key in the deployment platform's secret manager; never commit it, print it, or reuse a production key outside production.
+
 The Celery integration runs once on worker / beat startup and listens to every task execution — no per-task initialization is needed.
 
 ## Quickstart
@@ -216,11 +218,28 @@ Earlier versions accepted a `mode` argument with values like `'all'` and `'opt-i
 
 The `mode` argument is removed in this version; passing it raises `TypeError`, which is intentional — agents reading old snippets get a clear signal to update.
 
+## Verification
+
+1. Deploy or restart both the Celery worker and Beat after calling `setup_cronradar(app)`.
+2. Confirm the periodic task appears in the intended CronRadar application with its Beat schedule.
+3. Run the task through Celery and confirm a terminal `success` or `failed` result; discovery alone is not activation.
+4. Use CronRadar's guided reliability drill to verify notification delivery without changing the production task.
+
+To test authentication and outbound HTTPS without printing the key:
+
+```bash
+curl --fail-with-body --silent --show-error --user "$CRONRADAR_API_KEY:" "https://cron.life/api/sync/status"
+```
+
+## Migration
+
+If upgrading from selective or `mode='all'` setup, remove the mode argument and call `setup_cronradar(app)` once. All Beat-scheduled tasks are monitored by default; keep `@skip_monitor` only on intentional opt-outs. Deploy, confirm one reconciled registry and terminal run, then remove any old manual heartbeats that use the same task key.
+
 ## Links
 
 - **Documentation:** [docs.cronradar.com](https://docs.cronradar.com)
 - **Agent-friendly index:** [docs.cronradar.com/llms.txt](https://docs.cronradar.com/llms.txt)
-- **OpenAPI spec:** [api.cronradar.com/swagger/v1/swagger.json](https://api.cronradar.com/swagger/v1/swagger.json)
+- **OpenAPI spec:** [docs.cronradar.com/openapi.json](https://docs.cronradar.com/openapi.json)
 - **PyPI:** [pypi.org/project/cronradar-celery](https://pypi.org/project/cronradar-celery)
 - **GitHub:** [github.com/cronradar/cronradar-celery](https://github.com/cronradar/cronradar-celery)
 - **Base SDK:** [pypi.org/project/cronradar](https://pypi.org/project/cronradar)
