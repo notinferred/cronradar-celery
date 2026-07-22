@@ -5,15 +5,16 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="cronradar-celery",
-    version="0.1.0",
-    author="Administrator",
-    author_email="contact@cronradar.com",
-    description="Automatic monitoring for Celery periodic tasks. Monitor selective tasks or all tasks with auto-discovery.",
+    version="0.1.1",
+    author="CronRadar",
+    author_email="support@cronradar.com",
+    description="Detect missed and failed Celery periodic tasks with Beat schedule discovery and execution lifecycle tracking.",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/cronradar/cronradar-celery",
     project_urls={
-        "Documentation": "https://cronradar.com/docs",
+        "Documentation": "https://docs.cronradar.com/integrations/celery",
+        "Product": "https://cronradar.com/celery",
         "Source": "https://github.com/cronradar/cronradar-celery",
         "Tracker": "https://github.com/cronradar/cronradar-celery/issues",
     },
@@ -21,7 +22,6 @@ setup(
     classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
-        "License :: Other/Proprietary License",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.8",
@@ -37,6 +37,6 @@ setup(
         "cronradar>=0.0.6",
         "celery>=5.0.0",
     ],
-    keywords="celery monitoring cron task beat periodic auto-discovery cronradar",
+    keywords="celery beat periodic-tasks monitoring missed-tasks failed-tasks auto-discovery cronradar",
     license="Proprietary",
 )

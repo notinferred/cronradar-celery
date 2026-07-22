@@ -237,7 +237,8 @@ If upgrading from selective or `mode='all'` setup, remove the mode argument and 
 
 ## Links
 
-- **Documentation:** [docs.cronradar.com](https://docs.cronradar.com)
+- **Documentation:** [docs.cronradar.com/integrations/celery](https://docs.cronradar.com/integrations/celery)
+- **Monitoring overview:** [cronradar.com/celery](https://cronradar.com/celery)
 - **Agent-friendly index:** [docs.cronradar.com/llms.txt](https://docs.cronradar.com/llms.txt)
 - **OpenAPI spec:** [docs.cronradar.com/openapi.json](https://docs.cronradar.com/openapi.json)
 - **PyPI:** [pypi.org/project/cronradar-celery](https://pypi.org/project/cronradar-celery)
