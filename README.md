@@ -34,7 +34,9 @@ Get the API key from the CronRadar dashboard at [app.cronradar.com](https://app.
 
 Create a separate CronRadar application and API key for production, staging, and development. Store the key in the deployment platform's secret manager; never commit it, print it, or reuse a production key outside production.
 
-The Celery integration runs once on worker / beat startup and listens to every task execution — no per-task initialization is needed.
+Call setup on each Celery app at worker / Beat startup. Repeated setup on the same app is safe, and callbacks remain connected for the worker's lifetime. Tasks from apps that have not been configured and CronRadar's own reconciliation task are ignored.
+
+The API key is process-wide. Use separate worker processes for deployments that report to different CronRadar applications or accounts.
 
 ## Quickstart
 
@@ -104,7 +106,7 @@ The integration uses `task.name` as the monitor key.
 
 ### `setup_cronradar(app, api_key=None)`
 
-Wires the integration to a Celery app. Called once at application startup.
+Wires the integration to a Celery app. Call it at application startup; repeated calls for the same app do not duplicate callbacks or discovery.
 
 | Parameter | Type | Required | Notes |
 |---|---|---|---|

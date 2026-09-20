@@ -11,6 +11,13 @@ from celery.signals import task_prerun, task_success, task_failure
 import cronradar
 from .utils import normalize_task_name
 
+RECONCILE_TASK_NAME = "cronradar_celery.reconcile"
+
+
+def _belongs_to_app(task, app: Celery) -> bool:
+    return (task is not None and getattr(task, 'app', None) is app
+            and getattr(task, 'name', None) != RECONCILE_TASK_NAME)
+
 
 def skip_monitor_decorator(func: Callable) -> Callable:
     """
@@ -36,8 +43,12 @@ def setup_task_monitoring(app: Celery) -> None:
     Args:
         app: Celery application instance
     """
+    if getattr(app, '_cronradar_monitoring_registered', False) is True:
+        return
 
-    @task_prerun.connect
+    # These receivers are local functions. Weak references would let garbage
+    # collection silently remove execution reporting after setup returns.
+    @task_prerun.connect(weak=False)
     def handle_task_prerun(sender=None, task_id=None, task=None, **kwargs):
         """
         Handle task start for lifecycle tracking.
@@ -56,7 +67,7 @@ def setup_task_monitoring(app: Celery) -> None:
 
             # Check if this task should be monitored
             task_obj = task or sender
-            if not should_monitor_task(task_obj):
+            if not _belongs_to_app(task_obj, app) or not should_monitor_task(task_obj):
                 return
 
             # Normalize task name to monitor key
@@ -72,7 +83,7 @@ def setup_task_monitoring(app: Celery) -> None:
             # Never break user's task execution
             print(f"[CronRadar.Celery] StartJob error: {e}", file=sys.stderr)
 
-    @task_success.connect
+    @task_success.connect(weak=False)
     def handle_task_success(sender=None, **kwargs):
         """
         Handle successful task completion for lifecycle tracking.
@@ -86,7 +97,7 @@ def setup_task_monitoring(app: Celery) -> None:
             task_name = sender.name
 
             # Check if this task should be monitored
-            if not should_monitor_task(sender):
+            if not _belongs_to_app(sender, app) or not should_monitor_task(sender):
                 return
 
             # Normalize task name to monitor key
@@ -102,7 +113,7 @@ def setup_task_monitoring(app: Celery) -> None:
             # Never break user's task execution
             print(f"[CronRadar.Celery] CompleteJob error: {e}", file=sys.stderr)
 
-    @task_failure.connect
+    @task_failure.connect(weak=False)
     def handle_task_failure(sender=None, task_id=None, exception=None, **kwargs):
         """
         Handle task failure for immediate failure reporting.
@@ -116,7 +127,7 @@ def setup_task_monitoring(app: Celery) -> None:
             task_name = sender.name
 
             # Check if this task should be monitored
-            if not should_monitor_task(sender):
+            if not _belongs_to_app(sender, app) or not should_monitor_task(sender):
                 return
 
             # Normalize task name to monitor key
@@ -132,6 +143,13 @@ def setup_task_monitoring(app: Celery) -> None:
         except Exception as e:
             # Never break user's task execution
             print(f"[CronRadar.Celery] FailJob error: {e}", file=sys.stderr)
+
+    app._cronradar_signal_receivers = (
+        (task_prerun, handle_task_prerun),
+        (task_success, handle_task_success),
+        (task_failure, handle_task_failure),
+    )
+    app._cronradar_monitoring_registered = True
 
 
 def should_monitor_task(task) -> bool:
