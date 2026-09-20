@@ -8,19 +8,14 @@ Monitors all tasks by default - use @skip_monitor to opt-out.
 import sys
 from typing import Optional
 from celery import Celery
-from celery.signals import task_success, task_failure, task_retry
 
 from .monitors import setup_task_monitoring, skip_monitor_decorator
 from .discovery import discover_and_sync_tasks, RECONCILE_TASK_NAME
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 # How often the heartbeat re-declares the schedule (seconds).
 RECONCILE_INTERVAL_SECONDS = 900
-
-# Track initialization to prevent duplicate setup
-_initialized = False
-
 
 def setup_cronradar(app: Celery, api_key: Optional[str] = None) -> None:
     """
@@ -38,31 +33,22 @@ def setup_cronradar(app: Celery, api_key: Optional[str] = None) -> None:
         app = Celery('myapp')
         setup_cronradar(app)
     """
-    global _initialized
+    try:
+        if getattr(app, '_cronradar_initialized', False) is True:
+            return
 
-    if _initialized:
-        print("[CronRadar.Celery] Already initialized. Skipping duplicate setup.", file=sys.stderr)
-        return
+        # The base SDK reads one process-wide key. Separate accounts should use
+        # separate worker processes, as with CRONRADAR_API_KEY configuration.
+        if api_key:
+            import os
+            os.environ['CRONRADAR_API_KEY'] = api_key
 
-    _initialized = True
-
-    # Store API key in environment if provided
-    if api_key:
-        import os
-        os.environ['CRONRADAR_API_KEY'] = api_key
-
-    print("[CronRadar.Celery] Initializing MonitorAll mode - use @skip_monitor to opt-out", file=sys.stderr)
-
-    # Setup task monitoring via signals (execution telemetry)
-    setup_task_monitoring(app)
-
-    # Register the heartbeat reconcile task + periodic schedule (declaration)
-    _register_reconcile(app)
-
-    # Reconcile the full beat schedule now so coverage exists at startup
-    discover_and_sync_tasks(app)
-
-    print("[CronRadar.Celery] ✓ Monitoring enabled successfully!", file=sys.stderr)
+        setup_task_monitoring(app)
+        _register_reconcile(app)
+        discover_and_sync_tasks(app)
+        app._cronradar_initialized = True
+    except Exception as error:
+        print(f"[CronRadar.Celery] Setup failed: {type(error).__name__}", file=sys.stderr)
 
 
 def _register_reconcile(app: Celery) -> None:
@@ -71,7 +57,7 @@ def _register_reconcile(app: Celery) -> None:
     server keeps seeing the authoritative set (heartbeat) and drift is reflected.
     """
     try:
-        @app.task(name=RECONCILE_TASK_NAME)
+        @app.task(name=RECONCILE_TASK_NAME, shared=False)
         def _cronradar_reconcile():
             discover_and_sync_tasks(app)
 
