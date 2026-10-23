@@ -1,2 +1,2 @@
 cronradar>=0.0.1
-celery>=5.0.0
+celery>=5.2.2

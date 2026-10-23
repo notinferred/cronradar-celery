@@ -14,7 +14,7 @@ poetry add cronradar-celery
 uv add cronradar-celery
 ```
 
-Python 3.8+ supported. Celery 5.0+.
+Python 3.8+ supported. Celery 5.2.2+.
 
 ## Setup
 

@@ -35,7 +35,7 @@ setup(
     python_requires=">=3.8",
     install_requires=[
         "cronradar>=0.0.6",
-        "celery>=5.0.0",
+        "celery>=5.2.2",
     ],
     keywords="celery beat periodic-tasks monitoring missed-tasks failed-tasks auto-discovery cronradar",
     license="Proprietary",
