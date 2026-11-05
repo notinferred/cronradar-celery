@@ -7,10 +7,7 @@ from celery import Celery
 
 import cronradar
 from .utils import normalize_task_name, generate_readable_name, schedule_to_cron
-from .monitors import should_monitor_task
-
-# Internal task used for the periodic heartbeat reconcile; never monitored itself.
-RECONCILE_TASK_NAME = "cronradar_celery.reconcile"
+from .monitors import should_monitor_task, RECONCILE_TASK_NAME
 
 
 def discover_and_sync_tasks(app: Celery) -> None:

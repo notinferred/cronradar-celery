@@ -3,6 +3,7 @@ CronRadar Celery SDK Tests
 """
 
 import os
+import gc
 import pytest
 from datetime import timedelta
 from unittest.mock import patch, MagicMock
@@ -13,7 +14,7 @@ from cronradar_celery.utils import (
     generate_readable_name,
     timedelta_to_cron,
 )
-from cronradar_celery.monitors import should_monitor_task, skip_monitor_decorator
+from cronradar_celery.monitors import should_monitor_task, skip_monitor_decorator, setup_task_monitoring
 
 
 class TestNormalizeTaskName:
@@ -199,16 +200,14 @@ class TestSetupCronradar:
     """Tests for setup_cronradar()."""
 
     def setup_method(self):
-        """Reset initialization state before each test."""
-        import cronradar_celery
-        cronradar_celery._initialized = False
+        self.original_api_key = os.environ.get('CRONRADAR_API_KEY')
 
     def teardown_method(self):
         """Clean up after each test."""
-        import cronradar_celery
-        cronradar_celery._initialized = False
-        if 'CRONRADAR_API_KEY' in os.environ:
-            del os.environ['CRONRADAR_API_KEY']
+        if self.original_api_key is None:
+            os.environ.pop('CRONRADAR_API_KEY', None)
+        else:
+            os.environ['CRONRADAR_API_KEY'] = self.original_api_key
 
     @patch('cronradar_celery.discover_and_sync_tasks')
     @patch('cronradar_celery.setup_task_monitoring')
@@ -242,6 +241,149 @@ class TestSetupCronradar:
 
         assert mock_setup.call_count == 1
         assert mock_discover.call_count == 1
+
+    @patch('cronradar_celery.discover_and_sync_tasks')
+    @patch('cronradar_celery.setup_task_monitoring')
+    def test_initializes_each_app_once(self, mock_setup, mock_discover):
+        first, second = MagicMock(), MagicMock()
+        setup_cronradar(first)
+        setup_cronradar(second)
+        setup_cronradar(first)
+        assert mock_setup.call_count == mock_discover.call_count == 2
+        assert first._cronradar_initialized is True
+        assert second._cronradar_initialized is True
+
+    @patch('cronradar_celery.discover_and_sync_tasks')
+    @patch('cronradar_celery.setup_task_monitoring')
+    def test_failed_setup_does_not_break_startup_and_can_be_retried(self, mock_setup, mock_discover):
+        app = MagicMock()
+        mock_setup.side_effect = RuntimeError('Monitoring unavailable')
+        setup_cronradar(app)
+        assert getattr(app, '_cronradar_initialized', False) is not True
+        mock_setup.side_effect = None
+        setup_cronradar(app)
+        assert app._cronradar_initialized is True
+        assert mock_setup.call_count == 2
+        assert mock_discover.call_count == 1
+
+
+@pytest.fixture
+def celery_apps():
+    from celery import Celery
+    apps = []
+
+    def create(name):
+        app = Celery(name, broker='memory://', backend='cache+memory://')
+        app.conf.task_ignore_result = True
+        apps.append(app)
+        return app
+
+    yield create
+
+    for app in apps:
+        for signal, receiver in getattr(app, '_cronradar_signal_receivers', ()):
+            signal.disconnect(receiver)
+        app.close()
+
+
+def local_task(app, name, function=None):
+    def work():
+        return 'job-result'
+    return app.task(name=name, shared=False, lazy=False)(function or work)
+
+
+@patch('cronradar.fail_job')
+@patch('cronradar.complete_job')
+@patch('cronradar.start_job')
+def test_real_signals_survive_collection_and_repeated_setup(start, complete, fail, celery_apps):
+    from celery.signals import task_prerun, task_success, task_failure
+    app = celery_apps('signal-lifetime')
+    task = local_task(app, 'proof.periodic')
+    setup_task_monitoring(app)
+    first_receivers = app._cronradar_signal_receivers
+    setup_task_monitoring(app)
+    assert app._cronradar_signal_receivers is first_receivers
+    gc.collect()
+
+    task_prerun.send(sender=task, task=task, task_id='local-proof')
+    task_success.send(sender=task, result='job-result')
+    task_failure.send(sender=task, task_id='local-proof', exception=ValueError('Sample failure'))
+
+    start.assert_called_once_with('proof-periodic')
+    complete.assert_called_once_with('proof-periodic')
+    fail.assert_called_once_with('proof-periodic', 'Sample failure')
+
+
+@patch('cronradar.start_job')
+def test_multiple_apps_report_once_and_ignore_unconfigured_apps(start, celery_apps):
+    from celery.signals import task_prerun
+    first, second, other = [celery_apps(name) for name in ('first', 'second', 'other')]
+    setup_task_monitoring(first)
+    setup_task_monitoring(second)
+    gc.collect()
+    for app, name in ((first, 'proof.first'), (second, 'proof.second'), (other, 'proof.other')):
+        task = local_task(app, name)
+        task_prerun.send(sender=task, task=task, task_id='local-proof')
+    assert [call.args for call in start.call_args_list] == [('proof-first',), ('proof-second',)]
+
+
+@patch('cronradar.start_job')
+def test_internal_reconcile_and_opted_out_jobs_do_not_report(start, celery_apps):
+    from celery.signals import task_prerun
+    from cronradar_celery import RECONCILE_TASK_NAME
+    app = celery_apps('skipped-tasks')
+    setup_task_monitoring(app)
+
+    @skip_monitor
+    def skipped():
+        return 'unchanged'
+
+    for task in (local_task(app, RECONCILE_TASK_NAME), local_task(app, 'proof.skip', skipped)):
+        task_prerun.send(sender=task, task=task, task_id='local-proof')
+    start.assert_not_called()
+
+
+@patch('cronradar_celery.discover_and_sync_tasks')
+def test_each_apps_reconcile_task_uses_its_own_schedule(discover, celery_apps):
+    from cronradar_celery import RECONCILE_TASK_NAME
+    first, second = celery_apps('first-registry'), celery_apps('second-registry')
+    setup_cronradar(first)
+    setup_cronradar(second)
+    discover.reset_mock()
+    first.tasks[RECONCILE_TASK_NAME].run()
+    second.tasks[RECONCILE_TASK_NAME].run()
+    assert [call.args[0] for call in discover.call_args_list] == [first, second]
+
+
+@patch('cronradar.complete_job', side_effect=RuntimeError('Monitoring unavailable'))
+@patch('cronradar.start_job', side_effect=RuntimeError('Monitoring unavailable'))
+def test_monitoring_signal_errors_preserve_actual_task_result(start, complete, celery_apps):
+    app = celery_apps('fail-open-worker')
+    setup_task_monitoring(app)
+    task = local_task(app, 'proof.success')
+    result = task.apply(throw=True)
+    assert result.result == 'job-result'
+    start.assert_called_once()
+    complete.assert_called_once()
+
+
+@patch('cronradar.fail_job', side_effect=RuntimeError('Monitoring unavailable'))
+@patch('cronradar.start_job')
+def test_monitoring_signal_errors_preserve_actual_task_failure(start, fail, celery_apps):
+    app = celery_apps('failed-worker')
+    setup_task_monitoring(app)
+    original = ValueError('Original job failure')
+
+    def work():
+        raise original
+
+    task = local_task(app, 'proof.failure', work)
+    result = task.apply(throw=False)
+    assert result.result is original
+    with pytest.raises(ValueError) as raised:
+        result.get(propagate=True)
+    assert raised.value is original
+    fail.assert_called_once_with('proof-failure', 'Original job failure')
 
 
 class TestSkipMonitorIntegration:
