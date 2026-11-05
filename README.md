@@ -250,4 +250,4 @@ If upgrading from selective or `mode='all'` setup, remove the mode argument and 
 
 ## License
 
-© 2026 [CronRadar](https://cronradar.com) · Proprietary — see [LICENSE](./LICENSE).
+© 2026 [CronRadar](https://cronradar.com) · MIT — see [LICENSE](./LICENSE).
