@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="cronradar-celery",
-    version="0.1.1",
+    version="0.1.2",
     author="CronRadar",
     author_email="support@cronradar.com",
     description="Detect missed and failed Celery periodic tasks with Beat schedule discovery and execution lifecycle tracking.",
@@ -34,7 +34,7 @@ setup(
     ],
     python_requires=">=3.8",
     install_requires=[
-        "cronradar>=0.1.1",
+        "cronradar>=0.1.2",
         "celery>=5.2.2",
     ],
     keywords="celery beat periodic-tasks monitoring missed-tasks failed-tasks auto-discovery cronradar",

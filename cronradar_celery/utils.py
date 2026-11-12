@@ -2,6 +2,7 @@
 Utility functions for Celery integration.
 """
 
+import hashlib
 import sys
 import re
 from typing import Optional
@@ -33,11 +34,20 @@ def normalize_task_name(task_name: str) -> str:
     # Remove leading/trailing hyphens
     key = key.strip('-')
 
-    # Truncate at the SDK-wide max key length
-    if len(key) > MAX_MONITOR_KEY_LENGTH:
-        key = key[:MAX_MONITOR_KEY_LENGTH]
+    return shorten_monitor_key(key)
 
-    return key
+
+def shorten_monitor_key(key: str) -> str:
+    """
+    Shorten a normalized key over the monitor-key limit to a stable key, as every CronRadar SDK does
+    for keys it derives: the first 91 characters without trailing hyphens, a hyphen, and the first 8
+    hex characters of the SHA-256 of the full key (UTF-8). Keys within the limit are returned unchanged.
+    """
+    hash_length = 8
+    if len(key) <= MAX_MONITOR_KEY_LENGTH:
+        return key
+    digest = hashlib.sha256(key.encode('utf-8')).hexdigest()[:hash_length]
+    return key[:MAX_MONITOR_KEY_LENGTH - hash_length - 1].rstrip('-') + '-' + digest
 
 
 def generate_readable_name(task_name: str) -> str:

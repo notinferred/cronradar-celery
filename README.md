@@ -100,7 +100,7 @@ def process_payments():
     pass
 ```
 
-The integration uses `task.name` as the monitor key.
+The integration uses `task.name` as the monitor key. A key longer than 100 characters keeps its first 91 characters and ends with a hyphen and 8 hex characters of its SHA-256, so it stays stable and distinct.
 
 ## Reference
 

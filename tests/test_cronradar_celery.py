@@ -47,12 +47,21 @@ class TestNormalizeTaskName:
         result = normalize_task_name(None)
         assert result is None
 
-    def test_limits_length(self):
-        """Should limit length to MAX_MONITOR_KEY_LENGTH (200)."""
-        from cronradar.constants import MAX_MONITOR_KEY_LENGTH
-        long_name = 'a' * (MAX_MONITOR_KEY_LENGTH + 50)
-        result = normalize_task_name(long_name)
-        assert len(result) <= MAX_MONITOR_KEY_LENGTH
+    def test_matches_the_shared_shortening_vector(self):
+        """Keys over 100 characters shorten exactly as docs/SDK_SPECIFICATION.md "Monitor Keys" specifies."""
+        result = normalize_task_name('abcdef-' * 15 + 'end')
+        assert result == 'abcdef-' * 12 + 'abcdef-4f91bd6e'
+        assert len(result) == 99
+
+    def test_shortens_to_91_characters_and_a_hash(self):
+        """A key over the limit keeps its first 91 characters and a hash suffix."""
+        result = normalize_task_name('nightly.' + 'x' * 95)
+        assert result == 'nightly-' + 'x' * 83 + '-89d49067'
+        assert len(result) == 100
+
+    def test_keeps_a_key_at_the_limit(self):
+        """A 100-character key is unchanged."""
+        assert normalize_task_name('k' * 100) == 'k' * 100
 
     def test_removes_special_characters(self):
         """Should remove special characters except hyphens."""
