@@ -44,6 +44,7 @@ Call `setup_cronradar(app)` once on your Celery app:
 
 ```python
 from celery import Celery
+from celery.schedules import crontab
 from cronradar_celery import setup_cronradar, skip_monitor
 
 app = Celery('myapp', broker='redis://localhost:6379/0')
@@ -52,7 +53,7 @@ app = Celery('myapp', broker='redis://localhost:6379/0')
 app.conf.beat_schedule = {
     'send-daily-report': {
         'task': 'tasks.send_daily_report',
-        'schedule': '0 8 * * *',  # 8am daily
+        'schedule': crontab(hour=8, minute=0),  # 8am daily
     },
 }
 
@@ -68,7 +69,7 @@ That's it. On worker / Beat startup, the integration:
 
 - Walks every entry in `app.conf.beat_schedule`
 - Pre-syncs each scheduled task to CronRadar (so they appear in the dashboard immediately)
-- Translates `crontab(...)`, `schedule(timedelta(...))`, and string schedules into standard 5-field POSIX cron
+- Translates `crontab(...)` and `schedule(timedelta(...))` schedules into standard 5-field POSIX cron
 - Connects to Celery's `task_prerun`, `task_success`, and `task_failure` signals to record `start` / `complete` / `fail` per execution
 
 ## Decorators
@@ -139,11 +140,10 @@ def internal_cleanup():
 
 ### Schedule translation
 
-The integration accepts these schedule types in `beat_schedule`:
+The integration accepts these schedule types in `beat_schedule`. Celery itself does not accept a cron string there; write `crontab(...)` instead.
 
 | Beat schedule | Translated to CronRadar |
 |---|---|
-| `'0 8 * * *'` (string) | `0 8 * * *` (passthrough) |
 | `crontab(hour=8, minute=0)` | `0 8 * * *` |
 | `crontab(hour=8, minute=0, day_of_week='mon-fri')` | `0 8 * * 1-5` |
 | `schedule(run_every=timedelta(hours=1))` | `0 * * * *` |
