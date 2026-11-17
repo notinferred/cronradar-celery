@@ -12,7 +12,7 @@ from celery import Celery
 from .monitors import setup_task_monitoring, skip_monitor_decorator
 from .discovery import discover_and_sync_tasks, RECONCILE_TASK_NAME
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 # How often the heartbeat re-declares the schedule (seconds).
 RECONCILE_INTERVAL_SECONDS = 900
