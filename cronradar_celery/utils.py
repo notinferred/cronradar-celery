@@ -80,17 +80,16 @@ def generate_readable_name(task_name: str) -> str:
 
 def crontab_to_cron(crontab_obj) -> Optional[str]:
     """
-    Convert Celery crontab schedule to cron expression string.
+    Convert a Celery crontab schedule to a five-field cron expression.
 
-    Args:
-        crontab_obj: celery.schedules.crontab instance
-
-    Returns:
-        Cron expression string or None if conversion fails
+    Celery expands every field to a set of ints (day_of_week 0=Sunday, as in cron),
+    so each set is collapsed back to its shortest form. The expression keeps Celery's
+    local wall-clock time; CronRadar evaluates it in the application's time zone.
 
     Examples:
         crontab(hour=0, minute=0) -> '0 0 * * *'
         crontab(hour='*/6', minute=0) -> '0 */6 * * *'
+        crontab(minute=0, hour=9, day_of_week='mon-fri') -> '0 9 * * 1-5'
     """
     try:
         from celery.schedules import crontab
@@ -98,108 +97,69 @@ def crontab_to_cron(crontab_obj) -> Optional[str]:
         if not isinstance(crontab_obj, crontab):
             return None
 
-        # Extract fields (minute, hour, day_of_month, month, day_of_week)
-        minute = _format_cron_field(crontab_obj.minute)
-        hour = _format_cron_field(crontab_obj.hour)
-        day_of_month = _format_cron_field(crontab_obj.day_of_month)
-        month = _format_cron_field(crontab_obj.month_of_year)
-        day_of_week = _format_cron_field(crontab_obj.day_of_week)
-
-        return f"{minute} {hour} {day_of_month} {month} {day_of_week}"
+        return ' '.join([
+            _collapse_cron_field(crontab_obj.minute, 0, 59),
+            _collapse_cron_field(crontab_obj.hour, 0, 23),
+            _collapse_cron_field(crontab_obj.day_of_month, 1, 31),
+            _collapse_cron_field(crontab_obj.month_of_year, 1, 12),
+            _collapse_cron_field(crontab_obj.day_of_week, 0, 6),
+        ])
     except Exception as e:
         print(f"[CronRadar.Celery] Failed to convert crontab: {e}", file=sys.stderr)
         return None
 
 
-def timedelta_to_cron(interval: timedelta) -> str:
-    """
-    Convert timedelta interval to approximate cron expression.
-
-    Args:
-        interval: timedelta representing the repeat interval
-
-    Returns:
-        Approximate cron expression
-
-    Examples:
-        timedelta(hours=1) -> '0 * * * *'
-        timedelta(days=1) -> '0 0 * * *'
-    """
-    total_seconds = interval.total_seconds()
-
-    # Convert to common intervals
-    if total_seconds < 60:
-        return "* * * * *"  # Every minute (can't represent sub-minute)
-    elif total_seconds == 60:
-        return "* * * * *"  # Every minute
-    elif total_seconds == 300:
-        return "*/5 * * * *"  # Every 5 minutes
-    elif total_seconds == 900:
-        return "*/15 * * * *"  # Every 15 minutes
-    elif total_seconds == 1800:
-        return "*/30 * * * *"  # Every 30 minutes
-    elif total_seconds == 3600:
-        return "0 * * * *"  # Every hour
-    elif total_seconds % 3600 == 0 and total_seconds < 86400:
-        hours = int(total_seconds / 3600)
-        return f"0 */{hours} * * *"  # Every N hours
-    elif total_seconds == 86400:
-        return "0 0 * * *"  # Daily
-    elif total_seconds == 604800:
-        return "0 0 * * 0"  # Weekly (Sunday)
-    else:
-        # Default to hourly for other intervals
-        return "0 * * * *"
-
-
-def _format_cron_field(field) -> str:
-    """
-    Format a Celery crontab field for cron expression.
-
-    Celery uses sets for multiple values and '*' for all.
-    """
-    if field is None or field == '*':
+def _collapse_cron_field(values, low: int, high: int) -> str:
+    """Write a set of field values as '*', '*/n', 'a-b/n', or a list of values and ranges."""
+    values = sorted(values)
+    if values == list(range(low, high + 1)):
         return '*'
 
-    # If it's a set, join with commas
-    if isinstance(field, set):
-        return ','.join(str(x) for x in sorted(field))
+    if len(values) >= 3:
+        step = values[1] - values[0]
+        if step > 1 and values == list(range(values[0], values[-1] + 1, step)):
+            if values[0] == low and values[-1] + step > high:
+                return f'*/{step}'
+            return f'{values[0]}-{values[-1]}/{step}'
 
-    # If it's a string, return as-is (handles '*/N' patterns)
-    if isinstance(field, str):
-        return field
-
-    # Single value
-    return str(field)
+    parts = []
+    run_start = previous = values[0]
+    for value in values[1:] + [None]:
+        if value is not None and value == previous + 1:
+            previous = value
+            continue
+        if previous - run_start >= 2:
+            parts.append(f'{run_start}-{previous}')
+        else:
+            parts.extend(str(v) for v in range(run_start, previous + 1))
+        if value is not None:
+            run_start = previous = value
+    return ','.join(parts)
 
 
 def schedule_to_cron(schedule) -> Optional[str]:
     """
-    Convert any Celery schedule object to cron expression.
+    Convert a Celery Beat schedule to a five-field cron expression.
 
-    Args:
-        schedule: Celery schedule object (crontab, timedelta, solar, etc.)
-
-    Returns:
-        Cron expression string or None if conversion fails
+    Only crontab schedules have one. Intervals (timedelta, numbers, schedule(run_every=...))
+    run relative to when Beat started, and solar schedules follow the sun, so both return
+    None with a warning on stderr.
     """
     try:
-        from celery.schedules import crontab, schedule as base_schedule
+        from celery.schedules import crontab, schedule as interval_schedule, solar
 
-        # Handle crontab directly
         if isinstance(schedule, crontab):
             return crontab_to_cron(schedule)
 
-        # Handle schedule objects with run_every (timedelta-based)
-        if isinstance(schedule, base_schedule) and hasattr(schedule, 'run_every'):
-            if isinstance(schedule.run_every, timedelta):
-                return timedelta_to_cron(schedule.run_every)
+        if isinstance(schedule, solar):
+            print("[CronRadar.Celery] solar schedules have no five-field cron form", file=sys.stderr)
+            return None
 
-        # Handle raw timedelta
-        if isinstance(schedule, timedelta):
-            return timedelta_to_cron(schedule)
+        if isinstance(schedule, (interval_schedule, timedelta, int, float)):
+            print("[CronRadar.Celery] interval schedules run relative to Beat's start and have no "
+                  "five-field cron form; use crontab(...) to monitor this task", file=sys.stderr)
+            return None
 
-        # Unknown schedule type
         print(f"[CronRadar.Celery] Unknown schedule type: {type(schedule)}", file=sys.stderr)
         return None
 

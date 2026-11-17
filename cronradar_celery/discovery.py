@@ -3,7 +3,9 @@ Auto-discovery of Celery Beat periodic tasks.
 """
 
 import sys
+from datetime import datetime
 from celery import Celery
+from celery.schedules import crontab
 
 import cronradar
 from .utils import normalize_task_name, generate_readable_name, schedule_to_cron
@@ -54,6 +56,11 @@ def discover_and_sync_tasks(app: Celery) -> None:
                     print(f"[CronRadar.Celery] Skipping '{task_name}': Unable to convert schedule to cron", file=sys.stderr)
                     continue
 
+                if isinstance(schedule, crontab) and schedule.nowfun is not None:
+                    print(f"[CronRadar.Celery] '{task_name}' uses a custom nowfun; CronRadar expects "
+                          f"'{cron_expression}' in the application's time zone, so set it to the zone "
+                          f"nowfun returns", file=sys.stderr)
+
                 monitors.append({
                     'key': monitor_key,
                     'schedule': cron_expression,
@@ -64,8 +71,27 @@ def discover_and_sync_tasks(app: Celery) -> None:
                 print(f"[CronRadar.Celery] Failed to prepare '{schedule_name}': {e}", file=sys.stderr)
                 continue
 
+        if monitors:
+            _warn_once_if_not_utc(app)
+
         cronradar.sync_monitors(monitors, source='celery')
 
     except Exception as e:
         print(f"[CronRadar.Celery] Discovery error: {e}", file=sys.stderr)
         # Don't fail app startup on discovery errors
+
+
+def _warn_once_if_not_utc(app: Celery) -> None:
+    """Point at the CronRadar application's zone setting when Beat runs crontabs outside UTC."""
+    try:
+        if getattr(app, '_cronradar_timezone_warned', False) is True:
+            return
+        zone = app.timezone
+        winter, summer = datetime(2026, 1, 1, tzinfo=zone), datetime(2026, 7, 1, tzinfo=zone)
+        if winter.utcoffset() or summer.utcoffset():
+            print(f"[CronRadar.Celery] Celery evaluates crontab schedules in {zone}; set the "
+                  f"CronRadar application's time zone to {zone} so runs are expected at the same "
+                  f"local times", file=sys.stderr)
+        app._cronradar_timezone_warned = True
+    except Exception as e:
+        print(f"[CronRadar.Celery] Could not check the Celery time zone: {e}", file=sys.stderr)

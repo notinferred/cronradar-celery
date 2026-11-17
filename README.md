@@ -69,7 +69,7 @@ That's it. On worker / Beat startup, the integration:
 
 - Walks every entry in `app.conf.beat_schedule`
 - Pre-syncs each scheduled task to CronRadar (so they appear in the dashboard immediately)
-- Translates `crontab(...)` and `schedule(timedelta(...))` schedules into standard 5-field POSIX cron
+- Translates `crontab(...)` schedules into standard 5-field POSIX cron
 - Connects to Celery's `task_prerun`, `task_success`, and `task_failure` signals to record `start` / `complete` / `fail` per execution
 
 ## Decorators
@@ -146,9 +146,11 @@ The integration accepts these schedule types in `beat_schedule`. Celery itself d
 |---|---|
 | `crontab(hour=8, minute=0)` | `0 8 * * *` |
 | `crontab(hour=8, minute=0, day_of_week='mon-fri')` | `0 8 * * 1-5` |
-| `schedule(run_every=timedelta(hours=1))` | `0 * * * *` |
+| `crontab(minute='*/15', hour='9-17')` | `*/15 9-17 * * *` |
 
-If a schedule isn't translatable to standard cron (e.g., `solar(...)` schedules, sub-minute intervals), the integration logs a warning and that task is not monitored. Other tasks continue normally.
+Interval schedules (`timedelta(...)`, a number of seconds, or `schedule(run_every=...)`) run relative to when Beat started, and `solar(...)` schedules follow the sun, so neither has a five-field cron form. The integration logs a warning to stderr and that task is not monitored; write it as `crontab(...)` to monitor it. Other tasks continue normally.
+
+Celery evaluates a crontab in `app.conf.timezone` (UTC by default), or in the zone a crontab's `nowfun` returns. The integration sends the expression unchanged and CronRadar evaluates it in the CronRadar application's time zone, so set that zone to match. When Celery's zone is not UTC, or a crontab has a custom `nowfun`, the integration logs a reminder to stderr.
 
 ## Configuration
 
@@ -205,7 +207,7 @@ def my_task():
 
 ### Some tasks log "schedule not translatable"
 
-You're using a `solar(...)` schedule, a sub-minute interval, or a custom Beat schedule class. CronRadar monitors at minute resolution; these can't be expressed in standard cron. Either coarsen the schedule, or wrap the task body manually with the base SDK.
+You're using a `solar(...)` schedule, an interval schedule (`timedelta`, seconds, or `schedule(run_every=...)`), or a custom Beat schedule class. These can't be expressed in standard cron. Rewrite the schedule as `crontab(...)`, or wrap the task body manually with the base SDK.
 
 ### My task is `@app.task(name='my.dotted.name')` — what's the monitor key?
 
