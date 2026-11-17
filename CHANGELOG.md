@@ -2,7 +2,7 @@
 
 All notable changes to `cronradar-celery` are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.3] - 2026-11-17
 
 ### Fixed
 - `crontab(...)` schedules were sent as Celery's expanded value lists, such as `0 0 1,2,...,31 1,...,12 0,...,6` for a daily job, which exceed the server's 100-character schedule limit, so most Beat tasks were rejected at sync. Each field is now collapsed to `*`, `*/n`, `a-b/n` or a list of values and ranges.

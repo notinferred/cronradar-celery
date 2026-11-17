@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="cronradar-celery",
-    version="0.1.2",
+    version="0.1.3",
     author="CronRadar",
     author_email="support@cronradar.com",
     description="Detect missed and failed Celery periodic tasks with Beat schedule discovery and execution lifecycle tracking.",
